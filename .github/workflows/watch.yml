@@ -1,0 +1,59 @@
+name: watch
+on:
+  schedule:
+    # Every 15 minutes. GitHub-hosted cron drifts (often 15-30 min late at
+    # peak); that's still fine for a sellout window measured in hours.
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: watch
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: check
+        name: Diff the page
+        run: |
+          set -o pipefail
+          out=$(python3 check.py)
+          if [ -n "$out" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "msg<<MSG_EOF"
+              echo "$out"
+              echo "MSG_EOF"
+            } >> "$GITHUB_OUTPUT"
+            echo "--- change detected ---"
+            echo "$out"
+          else
+            echo "no change"
+          fi
+
+      - name: Notify via ntfy
+        if: steps.check.outputs.changed == 'true'
+        env:
+          MSG: ${{ steps.check.outputs.msg }}
+        run: |
+          curl -sS --fail-with-body \
+            -H "Title: Royal Tea reservation change" \
+            -H "Tags: tea,bell" \
+            -H "Priority: high" \
+            -H "Click: https://www.theroyaleagle.net/royal-tea" \
+            -d "$MSG" \
+            https://ntfy.sh/royal-tea-fgregg-7k2pq9
+
+      - name: Commit updated state
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add state.json
+          git commit -m "state: $(date -u +%FT%TZ)"
+          git push
