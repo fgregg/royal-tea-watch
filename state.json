@@ -1,3 +1,7 @@
 {
-  "events": {}
+  "events": {
+    "royal-tea-time-2026-06-16-11-00": {
+      "sold_out": true
+    }
+  }
 }
